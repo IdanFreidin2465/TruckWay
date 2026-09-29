@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#061923">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="TruckWay">
+<link rel="manifest" href="/manifest.webmanifest">
+<title>TruckWay 🚛</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:Arial,sans-serif;background:#061923;color:#fff}
+header{height:58px;padding:14px 16px;font-size:23px;font-weight:900}header span{color:#149ff3}
+#map{height:calc(100% - 130px)}
+.search{position:fixed;z-index:900;top:66px;left:10px;right:10px;display:flex;gap:6px}
+.search input{min-width:0;flex:1;padding:14px;border:0;border-radius:14px;font-size:16px}
+button{border:0;border-radius:12px;padding:12px;font-weight:800;background:#10364b;color:#fff}
+.primary{background:#149ff3}
+nav{height:72px;background:#092333;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:6px;position:fixed;bottom:0;left:0;right:0;z-index:1000}
+nav button{font-size:11px}
+.card{position:fixed;z-index:1100;bottom:82px;left:10px;right:10px;background:#061923f7;padding:15px;border-radius:18px;box-shadow:0 8px 30px #0008;display:none}
+.card.on{display:block}
+.row{display:flex;gap:7px;margin-top:10px}.row button{flex:1}
+.truckbox{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.truckbox input{width:100%;padding:11px;border-radius:10px;border:0;font-size:15px}
+.small{font-size:12px;color:#b9c9d0;line-height:1.5}.status{margin-top:9px;line-height:1.45}
+.pill{display:inline-block;background:#10364b;border-radius:20px;padding:5px 9px;margin:3px 2px;font-size:12px}
+.report-list{max-height:180px;overflow:auto;margin-top:8px}
+.report-item{padding:8px;border-bottom:1px solid #ffffff18;font-size:13px}
+</style>
+</head>
+<body>
+<header>Truck<span>Way</span></header>
+<div class="search"><input id="dest" placeholder="לאן נוסעים?"><button id="go">🚛 חשב</button></div>
+<div id="map"></div>
+
+<div class="card" id="routeCard">
+  <b id="title">מסלול</b>
+  <div id="meta"></div>
+  <div id="warning" class="status"></div>
+  <div class="row"><button class="primary" id="start">התחל נסיעה</button><button id="clear">נקה</button></div>
+</div>
+
+<div class="card" id="truckCard">
+  <b>🚛 פרטי המשאית</b>
+  <div class="small">הנתונים נשמרים לחשבון שלך ב‑Supabase ומשמשים לחישוב המסלול.</div>
+  <div class="truckbox">
+    <input id="h" type="number" step="0.01" placeholder="גובה (מ׳)">
+    <input id="w" type="number" step="0.01" placeholder="רוחב (מ׳)">
+    <input id="l" type="number" step="0.1" placeholder="אורך (מ׳)">
+    <input id="wt" type="number" step="0.1" placeholder="משקל (טון)">
+  </div>
+  <div class="row"><button class="primary" id="saveTruck">שמור</button><button id="closeTruck">סגור</button></div>
+</div>
+
+<div class="card" id="reportCard">
+  <b>⚠️ דיווח נהג</b>
+  <div class="small">הדיווח יישמר עם מיקום ה‑GPS שלך.</div>
+  <div class="row">
+    <button data-type="traffic">🚦 עומס</button>
+    <button data-type="roadwork">🚧 עבודות</button>
+  </div>
+  <div class="row">
+    <button data-type="blocked">⛔ חסימה</button>
+    <button data-type="broken_truck">🚛 משאית תקועה</button>
+  </div>
+  <button id="closeReport" style="margin-top:10px;width:100%">סגור</button>
+</div>
+
+<div class="card" id="loginCard">
+  <b>👤 התחברות</b>
+  <div class="small">נשלח קישור התחברות חד‑פעמי לאימייל.</div>
+  <input id="email" type="email" placeholder="האימייל שלך" style="width:100%;padding:12px;border:0;border-radius:10px;margin-top:10px">
+  <div class="row"><button class="primary" id="sendLogin">שלח קישור</button><button id="closeLogin">סגור</button></div>
+</div>
+
+<nav>
+  <button id="loc">📍<br>מיקום</button>
+  <button id="truck">🚛<br>משאית</button>
+  <button id="report">⚠️<br>דיווח</button>
+  <button id="login">👤<br>חשבון</button>
+</nav>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/config.js"></script>
+<script>
+const map=L.map('map').setView([31.97,34.77],11);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+const db=supabase.createClient(TRUCKWAY_CONFIG.url,TRUCKWAY_CONFIG.publishableKey);
+const $=id=>document.getElementById(id);
+let pos=null,route=null,positionMarker=null;
+let reportMarkers=new Map();
+let truck={height:4.2,width:2.55,length:16.5,weight:40};
+
+function openCard(id){$(id).classList.add('on')}
+function closeCard(id){$(id).classList.remove('on')}
+
+async function session(){
+  const {data}=await db.auth.getSession();
+  return data.session;
+}
+
+function locate(){
+  if(!navigator.geolocation)return alert('הדפדפן לא תומך ב‑GPS');
+  navigator.geolocation.getCurrentPosition(p=>{
+    pos=[p.coords.latitude,p.coords.longitude];
+    map.setView(pos,15);
+    if(positionMarker)map.removeLayer(positionMarker);
+    positionMarker=L.circleMarker(pos,{radius:8}).addTo(map).bindPopup('המיקום שלי');
+  },()=>alert('צריך לאשר גישה למיקום'),{enableHighAccuracy:true});
+}
+
+async function loadTruck(){
+  const s=await session();
+  if(!s)return;
+  const {data,error}=await db.from('trucks').select('*').eq('user_id',s.user.id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+  if(!error && data){
+    truck={height:Number(data.height_m),width:Number(data.width_m),length:Number(data.length_m),weight:Number(data.weight_t)};
+  }
+}
+
+function showTruck(){
+  $('h').value=truck.height;$('w').value=truck.width;$('l').value=truck.length;$('wt').value=truck.weight;
+  openCard('truckCard');
+}
+
+async function saveTruck(){
+  const s=await session();
+  if(!s)return openCard('loginCard');
+  const values={height_m:+$('h').value,width_m:+$('w').value,length_m:+$('l').value,weight_t:+$('wt').value};
+  if(!Object.values(values).every(v=>Number.isFinite(v)&&v>0))return alert('נא למלא את כל מידות המשאית');
+  truck={height:values.height_m,width:values.width_m,length:values.length_m,weight:values.weight_t};
+  const {error}=await db.from('trucks').insert({user_id:s.user.id,...values});
+  if(error)return alert('שמירת המשאית נכשלה: '+error.message);
+  closeCard('truckCard');alert('פרטי המשאית נשמרו');
+}
+
+async function geocode(q){
+  const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=il&accept-language=he&q='+encodeURIComponent(q),{headers:{Accept:'application/json'}});
+  const a=await r.json(); return a[0]||null;
+}
+
+async function search(){
+  if(!pos){locate();return}
+  const q=$('dest').value.trim();if(!q)return;
+  const s=await session();if(!s)return openCard('loginCard');
+  try{
+    const a=await geocode(q);
+    if(!a)throw new Error('יעד לא נמצא');
+    const target=[+a.lat,+a.lon];
+    const {data,error}=await db.functions.invoke('truck-route',{
+      body:{points:[pos,target],profile:'truck',
+        vehicle_height:truck.height,vehicle_width:truck.width,
+        vehicle_length:truck.length,vehicle_weight:truck.weight}
+    });
+    if(error)throw error;
+    if(!data || !data.paths || !data.paths.length)throw new Error(data?.message||'לא נמצא מסלול');
+    const path=data.paths[0];
+    if(route)map.removeLayer(route);
+    route=L.geoJSON({type:'Feature',geometry:path.points},{style:{weight:7}}).addTo(map);
+    map.fitBounds(route.getBounds(),{padding:[20,80]});
+    $('title').textContent='📍 '+a.display_name.split(',')[0];
+    $('meta').innerHTML='<span class="pill">'+(path.distance/1000).toFixed(1)+' ק״מ</span><span class="pill">'+Math.round(path.time/60000)+' דקות</span>';
+    $('warning').textContent='⚠️ המסלול חושב לפי פרטי המשאית. מידע חסר על מגבלות דרך אינו מהווה אישור בטיחות.';
+    openCard('routeCard');
+  }catch(e){console.error(e);alert('לא ניתן לחשב מסלול למשאית: '+(e.message||e))}
+}
+
+async function report(type){
+  const s=await session();if(!s)return openCard('loginCard');
+  if(!pos){locate();return}
+  const {error}=await db.from('reports').insert({user_id:s.user.id,report_type:type,latitude:pos[0],longitude:pos[1]});
+  if(error)return alert('הדיווח נכשל: '+error.message);
+  closeCard('reportCard');alert('הדיווח נוסף למפה');
+}
+
+function markerFor(r){
+  const icons={traffic:'🚦',roadwork:'🚧',blocked:'⛔',broken_truck:'🚛'};
+  const m=L.marker([r.latitude,r.longitude]).addTo(map).bindPopup((icons[r.report_type]||'⚠️')+' דיווח נהג');
+  reportMarkers.set(r.id,m);
+}
+async function loadReports(){
+  const s=await session();if(!s)return;
+  const {data}=await db.from('reports').select('id,report_type,latitude,longitude,status,expires_at').eq('status','active').gt('expires_at',new Date().toISOString()).limit(300);
+  (data||[]).forEach(markerFor);
+}
+db.channel('truckway-reports').on('postgres_changes',{event:'INSERT',schema:'public',table:'reports'},p=>{
+  if(p.new.status==='active')markerFor(p.new);
+}).subscribe();
+
+$('go').onclick=search;
+$('loc').onclick=locate;
+$('truck').onclick=showTruck;
+$('saveTruck').onclick=saveTruck;
+$('closeTruck').onclick=()=>closeCard('truckCard');
+$('report').onclick=()=>openCard('reportCard');
+$('closeReport').onclick=()=>closeCard('reportCard');
+document.querySelectorAll('[data-type]').forEach(b=>b.onclick=()=>report(b.dataset.type));
+$('login').onclick=()=>openCard('loginCard');
+$('closeLogin').onclick=()=>closeCard('loginCard');
+$('sendLogin').onclick=async()=>{
+  const email=$('email').value.trim();if(!email)return;
+  const {error}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin}});
+  alert(error?error.message:'נשלח קישור התחברות לאימייל');
+};
+$('clear').onclick=()=>{if(route)map.removeLayer(route);route=null;closeCard('routeCard')};
+$('start').onclick=()=>alert('הניווט התחיל. בשלב הבא נוסיף הוראות קוליות.');
+loadTruck();loadReports();locate();
+</script>
+</body></html>
