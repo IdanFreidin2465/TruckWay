@@ -200,37 +200,113 @@ $('closeReport').onclick=()=>closeCard('reportCard');
 document.querySelectorAll('[data-type]').forEach(b=>b.onclick=()=>report(b.dataset.type));
 $('login').onclick=()=>openCard('loginCard');
 $('closeLogin').onclick=()=>closeCard('loginCard');
-$('sendLogin').onclick=async()=>{
-  const email=$('email').value.trim();
-  if(!email)return;
+$('sendLogin').onclick = async () => {
+  const email = $('email').value.trim();
 
-  const btn=$('sendLogin');
-  btn.disabled=true;
+  if (!email) {
+    alert('הכנס כתובת אימייל');
+    return;
+  }
 
-  try{
-    const {error}=await db.auth.signInWithOtp({
-      email,
-      options:{
-        emailRedirectTo:'https://truckway-seven.vercel.app/app.html'
-      
+  const sendBtn = $('sendLogin');
+  const resendBtn = $('resendLogin');
+
+  sendBtn.disabled = true;
+
+  try {
+    const { error } = await db.auth.signInWithOtp({
+      email: email,
+      options: {
+        emailRedirectTo: 'https://truckway-seven.vercel.app/app.html'
       }
     });
 
-    if(error){
-      if(error.message.toLowerCase().includes('rate limit')){
-        alert('נשלח קישור לאחרונה. המתן לפחות דקה ונסה שוב.');
-      }else{
-        alert('שגיאה: '+error.message);
-      }
+    if (error) {
+      alert('שגיאה: ' + error.message);
+      sendBtn.disabled = false;
       return;
     }
 
-    alert('קישור התחברות נשלח לאימייל 📧');
+    alert('📧 קישור התחברות נשלח לאימייל שלך');
 
-  }finally{
-    setTimeout(()=>{
-      btn.disabled=false;
-    },65000);
+    // כפתור שליחה מחדש נשאר נעול ל-60 שניות
+    if (resendBtn) {
+      resendBtn.disabled = true;
+
+      let seconds = 60;
+      resendBtn.textContent = 'שלח שוב בעוד ' + seconds + ' שניות';
+
+      const timer = setInterval(() => {
+        seconds--;
+
+        if (seconds <= 0) {
+          clearInterval(timer);
+          resendBtn.disabled = false;
+          resendBtn.textContent = 'שלח קישור שוב';
+        } else {
+          resendBtn.textContent = 'שלח שוב בעוד ' + seconds + ' שניות';
+        }
+      }, 1000);
+    }
+
+  } catch (err) {
+    alert('שגיאה: ' + err.message);
+    sendBtn.disabled = false;
+  }
+};
+
+
+// שליחת קישור מחדש
+$('resendLogin').onclick = async () => {
+  const email = $('email').value.trim();
+
+  if (!email) {
+    alert('הכנס כתובת אימייל');
+    return;
+  }
+
+  const resendBtn = $('resendLogin');
+
+  resendBtn.disabled = true;
+
+  try {
+    const { error } = await db.auth.signInWithOtp({
+      email: email,
+      options: {
+        emailRedirectTo: 'https://truckway-seven.vercel.app/app.html'
+      }
+    });
+
+    if (error) {
+      alert('שגיאה: ' + error.message);
+      resendBtn.disabled = false;
+      resendBtn.textContent = 'שלח קישור שוב';
+      return;
+    }
+
+    alert('📧 נשלח קישור התחברות חדש');
+
+    let seconds = 60;
+    resendBtn.textContent = 'שלח שוב בעוד ' + seconds + ' שניות';
+
+    const timer = setInterval(() => {
+      seconds--;
+
+      if (seconds <= 0) {
+        clearInterval(timer);
+        resendBtn.disabled = false;
+        resendBtn.textContent = 'שלח קישור שוב';
+      } else {
+        resendBtn.textContent = 'שלח שוב בעוד ' + seconds + ' שניות';
+      }
+    }, 1000);
+
+  } catch (err) {
+    alert('שגיאה: ' + err.message);
+    resendBtn.disabled = false;
+    resendBtn.textContent = 'שלח קישור שוב';<button id="resendLogin" disabled>
+  שלח קישור שוב
+</button>
   }
 };
 $('clear').onclick=()=>{if(route)map.removeLayer(route);route=null;closeCard('routeCard')};
