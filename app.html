@@ -255,60 +255,6 @@ $('sendLogin').onclick = async () => {
   }
 };
 
-
-// שליחת קישור מחדש
-$('resendLogin').onclick = async () => {
-  const email = $('email').value.trim();
-
-  if (!email) {
-    alert('הכנס כתובת אימייל');
-    return;
-  }
-
-  const resendBtn = $('resendLogin');
-
-  resendBtn.disabled = true;
-
-  try {
-    const { error } = await db.auth.signInWithOtp({
-      email: email,
-      options: {
-        emailRedirectTo: 'https://truckway-seven.vercel.app/app.html'
-      }
-    });
-
-    if (error) {
-      alert('שגיאה: ' + error.message);
-      resendBtn.disabled = false;
-      resendBtn.textContent = 'שלח קישור שוב';
-      return;
-    }
-
-    alert('📧 נשלח קישור התחברות חדש');
-
-    let seconds = 60;
-    resendBtn.textContent = 'שלח שוב בעוד ' + seconds + ' שניות';
-
-    const timer = setInterval(() => {
-      seconds--;
-
-      if (seconds <= 0) {
-        clearInterval(timer);
-        resendBtn.disabled = false;
-        resendBtn.textContent = 'שלח קישור שוב';
-      } else {
-        resendBtn.textContent = 'שלח שוב בעוד ' + seconds + ' שניות';
-      }
-    }, 1000);
-
-  } catch (err) {
-    alert('שגיאה: ' + err.message);
-    resendBtn.disabled = false;
-    resendBtn.textContent = 'שלח קישור שוב';<button id="resendLogin" disabled>
-  שלח קישור שוב
-</button>
-  }
-};
 $('clear').onclick=()=>{if(route)map.removeLayer(route);route=null;closeCard('routeCard')};
 $('start').onclick=()=>alert('הניווט התחיל. בשלב הבא נוסיף הוראות קוליות.');
 loadTruck();loadReports();locate();
