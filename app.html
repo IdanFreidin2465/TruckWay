@@ -201,9 +201,36 @@ document.querySelectorAll('[data-type]').forEach(b=>b.onclick=()=>report(b.datas
 $('login').onclick=()=>openCard('loginCard');
 $('closeLogin').onclick=()=>closeCard('loginCard');
 $('sendLogin').onclick=async()=>{
-  const email=$('email').value.trim();if(!email)return;
-  const {error}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin}});
-  alert(error?error.message:'נשלח קישור התחברות לאימייל');
+  const email=$('email').value.trim();
+  if(!email)return;
+
+  const btn=$('sendLogin');
+  btn.disabled=true;
+
+  try{
+    const {error}=await db.auth.signInWithOtp({
+      email,
+      options:{
+        emailRedirectTo:location.origin+'/app.html'
+      }
+    });
+
+    if(error){
+      if(error.message.toLowerCase().includes('rate limit')){
+        alert('נשלח קישור לאחרונה. המתן לפחות דקה ונסה שוב.');
+      }else{
+        alert('שגיאה: '+error.message);
+      }
+      return;
+    }
+
+    alert('קישור התחברות נשלח לאימייל 📧');
+
+  }finally{
+    setTimeout(()=>{
+      btn.disabled=false;
+    },65000);
+  }
 };
 $('clear').onclick=()=>{if(route)map.removeLayer(route);route=null;closeCard('routeCard')};
 $('start').onclick=()=>alert('הניווט התחיל. בשלב הבא נוסיף הוראות קוליות.');
