@@ -211,7 +211,8 @@ $('sendLogin').onclick=async()=>{
     const {error}=await db.auth.signInWithOtp({
       email,
       options:{
-        emailRedirectTo:location.origin+'/app.html'
+      emailRedirectTo:'https://truckway-seven.vercel.app/app.html'
+      
       }
     });
 
